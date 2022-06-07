@@ -67,7 +67,8 @@ def main():
   duration = 0
   return_ = 0
   was_done = False
-  print('Diamonds exist:', env._world.count('diamond'))
+  print('Task: ', env._task_name)
+  print('Diamoonds exist:', env._world.count('diamond'))
 
   pygame.init()
   screen = pygame.display.set_mode(args.window)
@@ -108,7 +109,16 @@ def main():
           action = 'noop'
 
     # Environment step.
-    _, reward, done, _ = env.step(env.action_names.index(action))
+    _, vec_reward, vec_done, _ = env.step(env.action_names.index(action))
+    if(env._vector_reward):
+      print(vec_reward)
+      print(vec_done)
+      reward = vec_reward[env._task]
+      done = vec_done.all()
+    else:
+      reward = vec_reward
+      done = vec_done
+
     duration += 1
 
     # Achievements.
@@ -136,6 +146,8 @@ def main():
       if args.death == 'reset':
         print('\nStarting a new episode.')
         env.reset()
+        print('Task: ', env._task_name)
+
         achievements = set()
         was_done = False
         duration = 0

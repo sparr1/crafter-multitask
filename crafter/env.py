@@ -26,14 +26,22 @@ class Env(BaseClass):
 
   def __init__(
       self, area=(64, 64), view=(9, 9), size=(64, 64),
-      reward=True, length=10000, seed=None):
+      reward=True, length=10000, seed=None, task=None, task_reset = True, vector_reward = False):
     view = np.array(view if hasattr(view, '__len__') else (view, view))
     size = np.array(size if hasattr(size, '__len__') else (size, size))
     seed = np.random.randint(0, 2**31 - 1) if seed is None else seed
+    if not task:
+      self._task = None
+      self._task_name = None
+    self._num_tasks = 22
+    self._task_embedding_size = 6
+    self._random_task_embeddings = np.random.random((self._num_tasks, self._task_embedding_size))
     self._area = area
+
     self._view = view
     self._size = size
     self._reward = reward
+    self._vector_reward = vector_reward
     self._length = length
     self._seed = seed
     self._episode = 0
@@ -57,7 +65,7 @@ class Env(BaseClass):
 
   @property
   def observation_space(self):
-    return BoxSpace(0, 255, tuple(self._size) + (3,), np.uint8)
+    return BoxSpace(0, 255, tuple(self._size) + (3+self._task_embedding_size,), np.uint8)
 
   @property
   def action_space(self):
@@ -74,11 +82,22 @@ class Env(BaseClass):
     self._world.reset(seed=hash((self._seed, self._episode)) % (2 ** 31 - 1))
     self._update_time()
     self._player = objects.Player(self._world, center)
+    self._task_reset()
     self._last_health = self._player.health
     self._world.add(self._player)
     self._unlocked = set()
     worldgen.generate_world(self._world, self._player)
     return self._obs()
+
+  def _task_reset(self, unlocked = set()):
+    while True:
+      self._task = np.random.randint(0,22)
+      self._task_name = list(self._player.achievements.keys())[self._task]
+
+      if self._task_name not in unlocked:
+        print(self._task_name)
+        break
+
 
   def step(self, action):
     self._step += 1
@@ -95,26 +114,47 @@ class Env(BaseClass):
         self._balance_chunk(chunk, objs)
     obs = self._obs()
     reward = (self._player.health - self._last_health) / 10
+    vec_reward = np.full(len(self._player.achievements), reward)
     self._last_health = self._player.health
+    done = False
+    vec_done = np.full(len(self._player.achievements), done)
     unlocked = {
         name for name, count in self._player.achievements.items()
         if count > 0 and name not in self._unlocked}
+
     if unlocked:
       self._unlocked |= unlocked
-      reward += 1.0
+      vec_reward_ind = [list(self._player.achievements.keys()).index(achievement) for achievement in unlocked]
+
+      vec_reward[vec_reward_ind] += 1.0
+      if self._task_name in unlocked:
+        reward += 1.0
+        complete = len(self._unlocked) >= len(self._player.achievements)
+        if self._task_reset and not complete:
+          self._task_reset(self._unlocked)
+    vec_done_ind = [list(self._player.achievements.keys()).index(achievement) for achievement in self._unlocked]
+    vec_done[vec_done_ind] = True
+
+    done = vec_done.all() or not self._task_reset
+
     dead = self._player.health <= 0
     over = self._length and self._step >= self._length
-    done = dead or over
+    if not done:
+      done = dead or over
+      vec_done |= np.full_like(vec_done, done)
     info = {
         'inventory': self._player.inventory.copy(),
         'achievements': self._player.achievements.copy(),
         'discount': 1 - float(dead),
         'semantic': self._sem_view(),
         'player_pos': self._player.pos,
-        'reward': reward,
+        'reward': vec_reward if self._vector_reward else reward,
     }
     if not self._reward:
       reward = 0.0
+    if self._vector_reward:
+      reward = vec_reward
+      done = vec_done
     return obs, reward, done, info
 
   def render(self, size=None):
@@ -129,8 +169,18 @@ class Env(BaseClass):
     canvas[x: x + w, y: y + h] = view
     return canvas.transpose((1, 0, 2))
 
-  def _obs(self):
-    return self.render()
+  def _obs(self, task=True):
+    pixels = self.render()
+    view_size = pixels.shape[:2]
+    if task:
+      # task_panes = np.zeros(view_size + (len(self._player.achievements.keys()),))
+      # task_panes[:,:,self._task] = 255
+      task_panes = np.repeat(self._random_task_embeddings[self._task][None, :],64,0)
+      task_panes = (np.round(np.repeat(task_panes[None, :],64,0)*255)).astype(np.uint8)
+
+      return np.concatenate((pixels,task_panes),axis = 2)
+    else:
+      return pixels
 
   def _update_time(self):
     # https://www.desmos.com/calculator/grfbc6rs3h
