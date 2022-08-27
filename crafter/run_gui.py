@@ -111,8 +111,9 @@ def main():
     # Environment step.
     _, vec_reward, vec_done, _ = env.step(env.action_names.index(action))
     if(env._vector_reward):
-      print(vec_reward)
-      print(vec_done)
+      if(vec_reward.any()):
+        print(vec_reward)
+        print(vec_done)
       reward = vec_reward[env._task]
       done = vec_done.all()
     else:

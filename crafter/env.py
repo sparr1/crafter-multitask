@@ -26,7 +26,7 @@ class Env(BaseClass):
 
   def __init__(
       self, area=(64, 64), view=(9, 9), size=(64, 64),
-      reward=True, length=10000, seed=None, task=None, task_reset = True, vector_reward = False):
+      reward=True, length=10000, seed=None, task=None, task_reset = True, vector_reward = True):
     view = np.array(view if hasattr(view, '__len__') else (view, view))
     size = np.array(size if hasattr(size, '__len__') else (size, size))
     seed = np.random.randint(0, 2**31 - 1) if seed is None else seed
@@ -34,13 +34,11 @@ class Env(BaseClass):
       self._task = None
       self._task_name = None
     self._num_tasks = 22
-    self._task_embedding_size = 6
-    self._random_task_embeddings = np.random.random((self._num_tasks, self._task_embedding_size))
     self._area = area
 
     self._view = view
     self._size = size
-    self._reward = reward
+    self._reward = True #testing
     self._vector_reward = vector_reward
     self._length = length
     self._seed = seed
@@ -65,7 +63,10 @@ class Env(BaseClass):
 
   @property
   def observation_space(self):
-    return BoxSpace(0, 255, tuple(self._size) + (3+self._task_embedding_size,), np.uint8)
+    spaces = {'image': BoxSpace(0, 255, tuple(self._size) + (3,), np.uint8),
+              'task': BoxSpace(0,1, (self._num_tasks,), np.uint8)}
+    # 'task': BoxSpace(0,21, (1,), np.uint8)
+    return DictSpace(spaces)
 
   @property
   def action_space(self):
@@ -95,7 +96,9 @@ class Env(BaseClass):
       self._task_name = list(self._player.achievements.keys())[self._task]
 
       if self._task_name not in unlocked:
+        print("XXXXXXXXXXXXXXXXXXX")
         print(self._task_name)
+        print("XXXXXXXXXXXXXXXXXXX")
         break
 
 
@@ -149,13 +152,12 @@ class Env(BaseClass):
         'semantic': self._sem_view(),
         'player_pos': self._player.pos,
         'reward': vec_reward if self._vector_reward else reward,
+        'done': vec_done if self._vector_reward else done,
     }
     if not self._reward:
-      reward = 0.0
-    if self._vector_reward:
-      reward = vec_reward
-      done = vec_done
-    return obs, reward, done, info
+      vec_reward = np.full_like(vec_reward,0.001) #bug for reward change
+
+    return obs, vec_reward, vec_done, info
 
   def render(self, size=None):
     size = size or self._size
@@ -170,17 +172,13 @@ class Env(BaseClass):
     return canvas.transpose((1, 0, 2))
 
   def _obs(self, task=True):
-    pixels = self.render()
-    view_size = pixels.shape[:2]
+    image = self.render()
     if task:
-      # task_panes = np.zeros(view_size + (len(self._player.achievements.keys()),))
-      # task_panes[:,:,self._task] = 255
-      task_panes = np.repeat(self._random_task_embeddings[self._task][None, :],64,0)
-      task_panes = (np.round(np.repeat(task_panes[None, :],64,0)*255)).astype(np.uint8)
-
-      return np.concatenate((pixels,task_panes),axis = 2)
+      task_vec = np.zeros(self._num_tasks).astype(np.uint8)
+      task_vec[self._task] = 1
+      return {'image': image, 'task': task_vec}
     else:
-      return pixels
+      return image
 
   def _update_time(self):
     # https://www.desmos.com/calculator/grfbc6rs3h

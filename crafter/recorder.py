@@ -53,8 +53,10 @@ class StatsRecorder:
   def step(self, action):
     obs, reward, done, info = self._env.step(action)
     self._length += 1
-    self._reward += info['reward']
-    if done:
+    scalar_reward = info['reward'][obs['task'].argmax()]
+    self._reward += scalar_reward
+    scalar_done = info['done'][obs['task'].argmax()]
+    if done.all():
       self._stats = {'length': self._length, 'reward': round(self._reward, 1)}
       for key, value in info['achievements'].items():
         self._stats[f'achievement_{key}'] = value
@@ -90,7 +92,7 @@ class VideoRecorder:
   def step(self, action):
     obs, reward, done, info = self._env.step(action)
     self._frames.append(self._env.render(self._size))
-    if done:
+    if done.all():
       self._save()
     return obs, reward, done, info
 
@@ -175,7 +177,7 @@ class EpisodeName:
   def step(self, action):
     obs, reward, done, info = self._env.step(action)
     self._length += 1
-    if done:
+    if done.all():
       self._timestamp = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
       self._unlocked = sum(int(v >= 1) for v in info['achievements'].values())
     return obs, reward, done, info
