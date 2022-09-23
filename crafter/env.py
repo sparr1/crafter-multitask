@@ -35,7 +35,7 @@ class Env(BaseClass):
       self._task_name = None
     self._num_tasks = 22
     self._area = area
-
+    self.task_reset = task_reset
     self._view = view
     self._size = size
     self._reward = True #testing
@@ -133,12 +133,12 @@ class Env(BaseClass):
       if self._task_name in unlocked:
         reward += 1.0
         complete = len(self._unlocked) >= len(self._player.achievements)
-        if self._task_reset and not complete:
+        if self.task_reset and not complete:
           self._task_reset(self._unlocked)
     vec_done_ind = [list(self._player.achievements.keys()).index(achievement) for achievement in self._unlocked]
     vec_done[vec_done_ind] = True
 
-    done = vec_done.all() or not self._task_reset
+    done = vec_done.all() or not self.task_reset
 
     dead = self._player.health <= 0
     over = self._length and self._step >= self._length

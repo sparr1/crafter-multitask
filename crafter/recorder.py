@@ -1,7 +1,7 @@
 import datetime
 import json
 import pathlib
-
+import crafter
 import imageio
 import numpy as np
 
@@ -36,6 +36,7 @@ class StatsRecorder:
     self._reward = None
     self._unlocked = None
     self._stats = None
+    self._assigned_tasks = []
 
   def __getattr__(self, name):
     if name.startswith('__'):
@@ -48,16 +49,22 @@ class StatsRecorder:
     self._reward = 0
     self._unlocked = None
     self._stats = None
+    self._assigned_tasks = []
     return obs
 
   def step(self, action):
     obs, reward, done, info = self._env.step(action)
+    assigned_task = obs['task'].argmax()
+    task_name = crafter.constants.achievements[assigned_task]
+    if task_name not in self._assigned_tasks:
+      self._assigned_tasks.append(task_name)
     self._length += 1
-    scalar_reward = info['reward'][obs['task'].argmax()]
+    scalar_reward = info['reward'][assigned_task]
     self._reward += scalar_reward
-    scalar_done = info['done'][obs['task'].argmax()]
+    scalar_done = info['done'][assigned_task]
     if done.all():
-      self._stats = {'length': self._length, 'reward': round(self._reward, 1)}
+      self._stats = {'assigned_tasks':self._assigned_tasks,
+                    'length': self._length, 'reward': round(self._reward, 1)}
       for key, value in info['achievements'].items():
         self._stats[f'achievement_{key}'] = value
       self._save()
