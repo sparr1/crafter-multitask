@@ -115,7 +115,8 @@ def main():
         print(vec_reward)
         print(vec_done)
       reward = vec_reward[env._task]
-      done = vec_done.all()
+      # done = vec_done.all()
+      done = vec_done[env._task]
     else:
       reward = vec_reward
       done = vec_done

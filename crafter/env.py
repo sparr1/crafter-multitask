@@ -30,10 +30,15 @@ class Env(BaseClass):
     view = np.array(view if hasattr(view, '__len__') else (view, view))
     size = np.array(size if hasattr(size, '__len__') else (size, size))
     seed = np.random.randint(0, 2**31 - 1) if seed is None else seed
+
+    self._reset = task_reset
+
     if not task:
       self._task = None
       self._task_name = None
+    self._test_task = 2
     self._num_tasks = 22
+    # self._num_tasks = 1
     self._area = area
     self.task_reset = task_reset
     self._view = view
@@ -65,7 +70,7 @@ class Env(BaseClass):
   def observation_space(self):
     spaces = {'image': BoxSpace(0, 255, tuple(self._size) + (3,), np.uint8),
               'task': BoxSpace(0,1, (self._num_tasks,), np.uint8)}
-    # 'task': BoxSpace(0,21, (1,), np.uint8)
+    # 'task': BoxSpace(0,self._num_tasks-1, (1,), np.uint8)
     return DictSpace(spaces)
 
   @property
@@ -76,6 +81,8 @@ class Env(BaseClass):
   def action_names(self):
     return constants.actions
 
+  def get_task(self):
+    return self._task
   def reset(self):
     center = (self._world.area[0] // 2, self._world.area[1] // 2)
     self._episode += 1
@@ -92,14 +99,15 @@ class Env(BaseClass):
 
   def _task_reset(self, unlocked = set()):
     while True:
-      self._task = np.random.randint(0,22)
+      # self._task = np.random.randint(0,self._num_tasks)
+      self._task = self._test_task
       self._task_name = list(self._player.achievements.keys())[self._task]
 
-      if self._task_name not in unlocked:
-        print("XXXXXXXXXXXXXXXXXXX")
-        print(self._task_name)
-        print("XXXXXXXXXXXXXXXXXXX")
-        break
+      # if self._task_name not in unlocked:
+      print("XXXXXXXXXXXXXXXXXXX")
+      print(self._task_name)
+      print("XXXXXXXXXXXXXXXXXXX")
+      break
 
 
   def step(self, action):
@@ -133,17 +141,17 @@ class Env(BaseClass):
       if self._task_name in unlocked:
         reward += 1.0
         complete = len(self._unlocked) >= len(self._player.achievements)
-        if self.task_reset and not complete:
+        if self._reset and not complete:
           self._task_reset(self._unlocked)
     vec_done_ind = [list(self._player.achievements.keys()).index(achievement) for achievement in self._unlocked]
     vec_done[vec_done_ind] = True
 
-    done = vec_done.all() or not self.task_reset
+    done = vec_done.all() or not self._reset
 
     dead = self._player.health <= 0
     over = self._length and self._step >= self._length
     if not done:
-      done = dead or over
+      done = vec_done[self._test_task] or dead or over
       vec_done |= np.full_like(vec_done, done)
     info = {
         'inventory': self._player.inventory.copy(),
